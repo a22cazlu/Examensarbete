@@ -1,0 +1,112 @@
+<!DOCTYPE html>
+<html style="height: 100%">
+<head>
+  <meta charset="utf-8">
+  <title>Sverigekarta Heatmap med SCB-data</title>
+  <script src="https://cdn.jsdelivr.net/npm/echarts@5/dist/echarts.min.js"></script>
+</head>
+<body style="margin: 0; height: 100%">
+  <div id="main" style="height: 90%"></div>
+
+  <div style="text-align: center; margin-top: 10px;">
+    <label for="yearSlider">Välj år:</label>
+    <input type="range" id="yearSlider" min="2000" max="2024" step="1" value="2024">
+    <span id="yearValue">2024</span>
+  </div>
+
+  <script>
+    const chart = echarts.init(document.getElementById('main'));
+    let scbData;
+
+    fetch('sweden.json')
+      .then(res => res.json())
+      .then(geoJson => {
+        echarts.registerMap('sweden', geoJson);
+
+        fetch('scb.json')
+          .then(res => res.json())
+          .then(scb => {
+            scbData = scb;
+            initChart("2024"); // Ladda startår
+
+            document.getElementById("yearSlider").addEventListener("input", function () {
+              const year = this.value;
+              document.getElementById("yearValue").textContent = year;
+              initChart(year);
+            });
+          });
+
+        function initChart(year) {
+          const selectedKey = year + "M12";
+          const timeIndex = scbData.dataset.dimension.Tid.category.index[selectedKey];
+          const regionLabels = scbData.dataset.dimension.Region.category.label;
+          const regionIndexMap = scbData.dataset.dimension.Region.category.index;
+          const totalMonths = Object.keys(scbData.dataset.dimension.Tid.category.index).length;
+          const values = scbData.dataset.value;
+
+          if (timeIndex === undefined) {
+            console.warn("Valt år finns inte i SCB-data:", selectedKey);
+            return;
+          }
+
+          const echartsData = Object.keys(regionLabels).map(code => {
+            const name = regionLabels[code];
+            const regionIndex = regionIndexMap[code];
+            const valueIndex = regionIndex * totalMonths + timeIndex;
+            return {
+              name,
+              value: values[valueIndex]
+            };
+          });
+
+          chart.setOption({
+            title: {
+              text: `Sverigekarta – Befolkning per län (${selectedKey})`,
+              left: 'center'
+            },
+            tooltip: {
+              trigger: 'item',
+              formatter: '{b}<br/>Befolkning: {c}'
+            },
+            visualMap: {
+              min: 0,
+              max: 2500000,
+              left: '60%',
+              top: '50%',
+              text: ['Hög', 'Låg'],
+              calculable: true,
+              inRange: {
+                color: ['#e0f3f8', '#abd9e9', '#74add1', '#4575b4', '#313695']
+              }
+            },
+            series: [{
+              name: 'Befolkning',
+              type: 'map',
+              map: 'sweden',
+              roam: false,
+              label: {
+                show: true,
+                fontSize: 9
+              },
+              emphasis: {
+                scale: true,
+                itemStyle: {
+                  shadowBlur: 10,
+                  shadowColor: 'rgba(0, 0, 0, 0.3)',
+                  areaColor: null
+                },
+                label: {
+                  show: true
+                }
+              },
+              select: {
+                disabled: true
+              },
+              data: echartsData
+            }]
+          });
+        }
+      });
+  </script>
+</body>
+</html>
